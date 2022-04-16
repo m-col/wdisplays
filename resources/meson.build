@@ -15,7 +15,7 @@ resources = gnome.compile_resources(
 
 scour = find_program('scour', required: false)
 
-icon = 'wdisplays.svg'
+icon = 'network.cycles.wdisplays.svg'
 icondir = get_option('datadir') / 'icons' / 'hicolor' / 'scalable' / 'apps'
 
 if scour.found()
