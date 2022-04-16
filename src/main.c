@@ -408,6 +408,49 @@ void wd_ui_show_error(struct wd_state *state, const char *message) {
   gtk_info_bar_set_revealed(GTK_INFO_BAR(state->info_bar), TRUE);
 }
 
+void print_settings_error(GError *error) {
+    if (error) {
+      fprintf(stderr, "failed to load setting: %s\n", error->message);
+    }
+    error = NULL;
+}
+
+void load_settings(struct wd_state *state) {
+  GKeyFile *key_file = g_key_file_new();
+  gboolean success = g_key_file_load_from_data_dirs(key_file, "wdisplays.settings", &state->settings_path, G_KEY_FILE_NONE, NULL);
+  if (success) {
+    GError *error = NULL;
+    state->autoapply = g_key_file_get_boolean(key_file, "Settings", "auto-apply", &error);
+    print_settings_error(error);
+    state->capture = g_key_file_get_boolean(key_file, "Settings", "capture-screens", &error);
+    print_settings_error(error);
+    state->show_overlay = g_key_file_get_boolean(key_file, "Settings", "show-overlay", &error);
+    print_settings_error(error);
+    state->zoom = g_key_file_get_double(key_file, "Settings", "zoom", &error);
+    print_settings_error(error);
+  }
+  g_key_file_free(key_file);
+}
+
+void save_settings(struct wd_state *state) {
+  GKeyFile *key_file = g_key_file_new();
+  if (!state->settings_path) {
+    state->settings_path = g_strdup_printf("%s/%s", g_get_user_data_dir(), "wdisplays.settings");
+  }
+
+  g_key_file_set_boolean(key_file, "Settings", "auto-apply", state->autoapply);
+  g_key_file_set_boolean(key_file, "Settings", "capture-screens", state->capture);
+  g_key_file_set_boolean(key_file, "Settings", "show-overlay", state->show_overlay);
+  g_key_file_set_double(key_file, "Settings", "zoom", state->zoom);
+
+  GError *error = NULL;
+  gboolean success = g_key_file_save_to_file(key_file, state->settings_path, &error);
+  if (!success) {
+    fprintf(stderr, "failed to save settings: %s\n", error->message);
+  }
+  g_key_file_free(key_file);
+}
+
 // BEGIN GLOBAL CALLBACKS
 static void cleanup(GtkWidget *window, gpointer data) {
   struct wd_state *state = data;
@@ -464,6 +507,7 @@ static void zoom_to(struct wd_state *state, double zoom) {
   state->zoom = zoom;
   state->zoom = MAX(state->zoom, MIN_ZOOM);
   state->zoom = MIN(state->zoom, MAX_ZOOM);
+  save_settings(state);
   update_zoom(state);
 }
 
@@ -860,6 +904,7 @@ static void auto_apply_selected(GSimpleAction *action, GVariant *param, gpointer
   struct wd_state *state = data;
   state->autoapply = g_variant_get_boolean(param);
   g_simple_action_set_state(action, param);
+  save_settings(state);
 }
 
 static gboolean redraw_canvas(GtkWidget *widget, GdkFrameClock *frame_clock, gpointer data) {
@@ -876,6 +921,7 @@ static void capture_selected(GSimpleAction *action, GVariant *param, gpointer da
   struct wd_state *state = data;
   state->capture = g_variant_get_boolean(param);
   g_simple_action_set_state(action, param);
+  save_settings(state);
   update_tick_callback(state);
 }
 
@@ -883,6 +929,7 @@ static void overlay_selected(GSimpleAction *action, GVariant *param, gpointer da
   struct wd_state *state = data;
   state->show_overlay = g_variant_get_boolean(param);
   g_simple_action_set_state(action, param);
+  save_settings(state);
 
   struct wd_output *output;
   wl_list_for_each(output, &state->outputs, link) {
@@ -924,6 +971,7 @@ static void activate(GtkApplication* app, gpointer user_data) {
   state->canvas_tick = -1;
   state->apply_idle = -1;
   state->reset_idle = -1;
+  load_settings(state);
 
   GtkCssProvider *css_provider = gtk_css_provider_new();
   gtk_css_provider_load_from_resource(css_provider,

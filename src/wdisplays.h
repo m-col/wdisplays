@@ -190,6 +190,7 @@ struct wd_state {
   bool capture;
   bool show_overlay;
   double zoom;
+  char *settings_path;
 
   unsigned int apply_idle;
   unsigned int reset_idle;
